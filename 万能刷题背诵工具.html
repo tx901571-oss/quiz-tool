@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>万能刷题与背诵工具</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; }
+  .fade-in { animation: fadeIn 0.3s ease-in; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  .card-hover { transition: all 0.2s; }
+  .card-hover:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,0.1); }
+  .dark .card-hover:hover { box-shadow: 0 8px 25px rgba(0,0,0,0.4); }
+  .option-btn { transition: all 0.15s; cursor: pointer; }
+  .option-btn:hover:not(.answered) { background: var(--hover-bg); }
+  :root { --hover-bg: #e0e7ff; }
+  .dark { --hover-bg: #312e81; }
+  .option-btn.correct { background: #dcfce7 !important; border-color: #22c55e !important; color: #166534; }
+  .dark .option-btn.correct { background: #14532d !important; border-color: #22c55e !important; color: #86efac; }
+  .option-btn.wrong { background: #fee2e2 !important; border-color: #ef4444 !important; color: #991b1b; }
+  .dark .option-btn.wrong { background: #450a0a !important; border-color: #ef4444 !important; color: #fca5a5; }
+  .progress-fill { transition: width 0.5s ease; }
+  .btn-mastered { transition: all 0.2s; }
+  .btn-mastered:hover { transform: scale(1.05); }
+  .filter-active { background: #3b82f6 !important; color: white !important; }
+  .chapter-tag { display: inline-block; padding: 2px 10px; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+  .dark ::-webkit-scrollbar-thumb { background: #475569; }
+  /* Flip card */
+  .flip-card { perspective: 1000px; }
+  .flip-inner { transition: transform 0.6s; transform-style: preserve-3d; position: relative; }
+  .flip-inner.flipped { transform: rotateY(180deg); }
+  .flip-front, .flip-back { backface-visibility: hidden; }
+  .flip-back { transform: rotateY(180deg); position: absolute; top: 0; left: 0; width: 100%; min-height: 100%; }
+  /* Drop zone */
+  .drop-zone { border: 2px dashed #cbd5e1; transition: all 0.2s; }
+  .drop-zone.dragover { border-color: #3b82f6; background: rgba(59,130,246,0.05); }
+  .dark .drop-zone { border-color: #475569; }
+  .dark .drop-zone.dragover { border-color: #3b82f6; background: rgba(59,130,246,0.1); }
+</style>
+</head>
+<body class="bg-gradient-to-br from-slate-50 to-blue-50 min-h-screen transition-colors duration-300">
+
+<!-- ============ IMPORT SCREEN ============ -->
+<div id="importScreen" class="max-w-2xl mx-auto px-4 py-8">
+  <div class="text-center mb-8">
+    <h1 class="text-3xl font-bold text-slate-800 dark:text-slate-100"><i class="fas fa-brain text-blue-500 mr-2"></i>万能刷题与背诵工具</h1>
+    <p class="text-slate-500 mt-2">粘贴文本或上传文件，智能解析，即刻开始</p>
+    <button onclick="toggleDark()" class="mt-3 px-3 py-1.5 rounded-lg text-sm bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 transition-all">
+      <i class="fas fa-moon mr-1"></i><span id="darkLabel">夜间模式</span>
+    </button>
+  </div>
+
+  <!-- Library selector -->
+  <div class="mb-6">
+    <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2"><i class="fas fa-folder-open mr-1"></i>已有题库</label>
+    <div class="flex gap-2 flex-wrap" id="libraryList"></div>
+  </div>
+
+  <!-- Name input -->
+  <div class="mb-4">
+    <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">题库名称</label>
+    <input id="libName" type="text" placeholder="输入名称（如：解剖学期末）" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-blue-400 text-sm">
+  </div>
+
+  <!-- Text area -->
+  <div class="mb-4">
+    <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1"><i class="fas fa-paste mr-1"></i>粘贴文本内容</label>
+    <textarea id="textInput" rows="10" placeholder="粘贴你的题库或知识点文本..." class="w-full px-4 py-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-blue-400 text-sm leading-relaxed resize-y"></textarea>
+  </div>
+
+  <!-- File upload -->
+  <div class="mb-4">
+    <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1"><i class="fas fa-upload mr-1"></i>或上传文件</label>
+    <div id="dropZone" class="drop-zone rounded-xl p-8 text-center cursor-pointer" onclick="document.getElementById('fileInput').click()">
+      <i class="fas fa-cloud-upload-alt text-3xl text-slate-400 mb-2"></i>
+      <p class="text-sm text-slate-500">点击选择或拖拽 TXT / Markdown / Word 文件到此处</p>
+      <p id="fileName" class="text-xs text-blue-500 mt-1"></p>
+    </div>
+    <input id="fileInput" type="file" accept=".txt,.md,.text,.markdown,.docx,.doc" class="hidden" onchange="handleFile(this.files[0])">
+  </div>
+
+  <!-- Parse options -->
+  <div class="mb-6 flex flex-wrap gap-3">
+    <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">解析模式：</label>
+    <label class="flex items-center gap-1.5 text-sm text-slate-600 dark:text-slate-400 cursor-pointer">
+      <input type="radio" name="parseMode" value="auto" checked class="accent-blue-500"> 自动识别
+    </label>
+    <label class="flex items-center gap-1.5 text-sm text-slate-600 dark:text-slate-400 cursor-pointer">
+      <input type="radio" name="parseMode" value="quiz" class="accent-blue-500"> 强制题库
+    </label>
+    <label class="flex items-center gap-1.5 text-sm text-slate-600 dark:text-slate-400 cursor-pointer">
+      <input type="radio" name="parseMode" value="knowledge" class="accent-blue-500"> 强制知识点
+    </label>
+  </div>
+
+  <!-- Import button -->
+  <button onclick="doImport()" class="w-full py-3.5 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white font-semibold text-base transition-all active:scale-[0.98] shadow-lg shadow-blue-500/25">
+    <i class="fas fa-rocket mr-2"></i>解析并开始学习
+  </button>
+
+  <!-- Format hints -->
+  <details class="mt-6">
+    <summary class="text-sm text-slate-500 cursor-pointer hover:text-slate-700"><i class="fas fa-question-circle mr-1"></i>支持的文本格式说明</summary>
+    <div class="mt-3 p-4 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-600 dark:text-slate-400 space-y-3">
+      <div>
+        <div class="font-semibold text-slate-800 dark:text-slate-200 mb-1">题库格式示例：</div>
+        <pre class="bg-slate-50 dark:bg-slate-900 p-3 rounded-lg text-xs overflow-x-auto whitespace-pre-wrap">1. 以下哪块肌肉不是髋关节的？
+A. 臀大肌
+B. 髂腰肌
+C. 肱二头肌
+D. 梨状肌
+答案：C
+解析：肱二头肌是上臂肌肉。</pre>
+      </div>
+      <div>
+        <div class="font-semibold text-slate-800 dark:text-slate-200 mb-1">知识点格式示例：</div>
+        <pre class="bg-slate-50 dark:bg-slate-900 p-3 rounded-lg text-xs overflow-x-auto whitespace-pre-wrap"># 章节标题
+## 知识点名称
+详细内容或答案
+
+【名词解释】内容
+名词：解释内容</pre>
+      </div>
+    </div>
+  </details>
+</div>
+
+<!-- ============ STUDY SCREEN ============ -->
+<div id="studyScreen" class="hidden">
+  <!-- Header -->
+  <header class="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md shadow-sm sticky top-0 z-50 transition-colors">
+    <div class="max-w-3xl mx-auto px-4 py-3">
+      <div class="flex items-center justify-between mb-2">
+        <div class="flex items-center gap-2">
+          <button onclick="backToImport()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"><i class="fas fa-arrow-left"></i></button>
+          <h1 class="text-base font-bold text-slate-800 dark:text-slate-100 truncate" id="libTitle">题库</h1>
+        </div>
+        <div class="flex gap-1.5">
+          <button onclick="toggleDark()" class="px-2 py-1.5 rounded-lg text-xs bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 transition-all">
+            <i class="fas fa-moon"></i>
+          </button>
+          <button onclick="shuffleData()" class="px-2.5 py-1.5 rounded-lg text-xs bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600 transition-all" title="打乱顺序">
+            <i class="fas fa-shuffle mr-1"></i>随机
+          </button>
+          <button onclick="resetProgress()" class="px-2.5 py-1.5 rounded-lg text-xs bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50 transition-all" title="清空进度">
+            <i class="fas fa-trash-can mr-1"></i>重置
+          </button>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <button id="modeQuiz" onclick="switchMode('quiz')" class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all bg-blue-500 text-white">
+          <i class="fas fa-pen-to-square mr-1"></i>刷题
+        </button>
+        <button id="modeRecite" onclick="switchMode('recite')" class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+          <i class="fas fa-book-open mr-1"></i>背诵
+        </button>
+        <div class="flex-1"></div>
+        <span id="progressText" class="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">0/0</span>
+      </div>
+      <div class="mt-2">
+        <div class="flex-1 bg-slate-200 dark:bg-slate-700 rounded-full h-2 overflow-hidden">
+          <div id="progressBar" class="progress-fill h-full bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full" style="width:0%"></div>
+        </div>
+      </div>
+      <div class="flex gap-2 mt-2 overflow-x-auto pb-1">
+        <button onclick="setFilter('all')" data-filter="all" class="filter-btn filter-active px-3 py-1 rounded-full text-xs font-medium transition-all whitespace-nowrap">全部</button>
+        <button onclick="setFilter('unmastered')" data-filter="unmastered" class="filter-btn px-3 py-1 rounded-full text-xs font-medium transition-all bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 whitespace-nowrap">❌ 未掌握</button>
+        <button onclick="setFilter('mastered')" data-filter="mastered" class="filter-btn px-3 py-1 rounded-full text-xs font-medium transition-all bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 whitespace-nowrap">✅ 已掌握</button>
+        <select id="chapterFilter" onchange="setChapter(this.value)" class="px-2 py-1 rounded-full text-xs bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border-0 outline-none">
+          <option value="all">所有章节</option>
+        </select>
+      </div>
+    </div>
+  </header>
+
+  <!-- Stats -->
+  <div class="max-w-3xl mx-auto px-4 mt-3">
+    <div class="grid grid-cols-3 gap-3">
+      <div class="bg-white/70 dark:bg-slate-800/70 backdrop-blur-sm rounded-xl p-3 text-center border border-slate-100 dark:border-slate-700">
+        <div class="text-2xl font-bold text-blue-600 dark:text-blue-400" id="statTotal">0</div>
+        <div class="text-xs text-slate-500 dark:text-slate-400">总数</div>
+      </div>
+      <div class="bg-white/70 dark:bg-slate-800/70 backdrop-blur-sm rounded-xl p-3 text-center border border-slate-100 dark:border-slate-700">
+        <div class="text-2xl font-bold text-green-600 dark:text-green-400" id="statMastered">0</div>
+        <div class="text-xs text-slate-500 dark:text-slate-400">已掌握</div>
+      </div>
+      <div class="bg-white/70 dark:bg-slate-800/70 backdrop-blur-sm rounded-xl p-3 text-center border border-slate-100 dark:border-slate-700">
+        <div class="text-2xl font-bold text-amber-500" id="statRate">0%</div>
+        <div class="text-xs text-slate-500 dark:text-slate-400">掌握率</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <main class="max-w-3xl mx-auto px-4 py-4 pb-24">
+    <div id="cardContainer" class="fade-in"></div>
+    <div id="emptyState" class="hidden text-center py-16">
+      <i class="fas fa-filter-circle-xmark text-4xl text-slate-300 dark:text-slate-600 mb-3"></i>
+      <p class="text-slate-400 dark:text-slate-500">当前筛选条件下没有内容</p>
+    </div>
+  </main>
+
+  <!-- Bottom Nav -->
+  <nav class="fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-slate-800/90 backdrop-blur-md border-t border-slate-200 dark:border-slate-700 z-50">
+    <div class="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
+      <button onclick="goPrev()" class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-medium text-sm transition-all active:scale-95">
+        <i class="fas fa-chevron-left"></i>上一个
+      </button>
+      <span id="navIndicator" class="text-sm text-slate-500 dark:text-slate-400 font-medium">1 / 1</span>
+      <button onclick="goNext()" class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-500 hover:bg-blue-600 text-white font-medium text-sm transition-all active:scale-95">
+        下一个<i class="fas fa-chevron-right"></i>
+      </button>
+    </div>
+  </nav>
+</div>
+
+<script>
+// ============ DARK MODE ============
+let darkMode = localStorage.getItem('anatomy_dark') === 'true';
+function applyDark() {
+  document.documentElement.classList.toggle('dark', darkMode);
+  document.body.classList.toggle('bg-gradient-to-br', !darkMode);
+  document.body.classList.toggle('from-slate-50', !darkMode);
+  document.body.classList.toggle('to-blue-50', !darkMode);
+  document.body.style.background = darkMode ? 'linear-gradient(to bottom right, #0f172a, #1e1b4b)' : '';
+  document.getElementById('darkLabel').textContent = darkMode ? '日间模式' : '夜间模式';
+}
+function toggleDark() {
+  darkMode = !darkMode;
+  localStorage.setItem('anatomy_dark', darkMode);
+  applyDark();
+}
+applyDark();
+
+// ============ LIBRARY MANAGEMENT ============
+let currentLib = '';
+let rawData = [];
+let currentMode = 'quiz';
+let currentFilter = 'all';
+let currentChapter = 'all';
+let currentIndex = 0;
+let mastered = {};
+
+function getLibKey(name) { return 'quizlib_' + name; }
+function getLibDataKey(name) { return 'quizlib_data_' + name; }
+
+function loadLibrary(name) {
+  currentLib = name;
+  const stored = localStorage.getItem(getLibDataKey(name));
+  rawData = stored ? JSON.parse(stored) : [];
+  mastered = JSON.parse(localStorage.getItem(getLibKey(name)) || '{}');
+  document.getElementById('libTitle').textContent = name;
+}
+
+function saveMastered() {
+  if (currentLib) localStorage.setItem(getLibKey(currentLib), JSON.stringify(mastered));
+}
+
+function getLibraryNames() {
+  const names = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key.startsWith('quizlib_data_')) names.push(key.replace('quizlib_data_', ''));
+  }
+  return names;
+}
+
+function renderLibraryList() {
+  const names = getLibraryNames();
+  const container = document.getElementById('libraryList');
+  if (names.length === 0) {
+    container.innerHTML = '<span class="text-xs text-slate-400">暂无已保存的题库</span>';
+    return;
+  }
+  container.innerHTML = names.map(n => {
+    const progress = JSON.parse(localStorage.getItem(getLibKey(n)) || '{}');
+    const total = JSON.parse(localStorage.getItem(getLibDataKey(n)) || '[]').length;
+    const done = Object.values(progress).filter(v => v === 'mastered').length;
+    const rate = total > 0 ? Math.round(done / total * 100) : 0;
+    return `<div class="flex items-center gap-2 px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm">
+      <button onclick="enterLibrary('${n.replace(/'/g, "\\'")}')" class="text-slate-800 dark:text-slate-200 font-medium hover:text-blue-500 transition-colors">${n}</button>
+      <span class="text-xs text-slate-400">${done}/${total} (${rate}%)</span>
+      <button onclick="deleteLibrary('${n.replace(/'/g, "\\'")}')" class="ml-1 text-red-400 hover:text-red-600 transition-colors" title="删除"><i class="fas fa-times"></i></button>
+    </div>`;
+  }).join('');
+}
+
+function enterLibrary(name) {
+  loadLibrary(name);
+  document.getElementById('importScreen').classList.add('hidden');
+  document.getElementById('studyScreen').classList.remove('hidden');
+  initChapters();
+  render();
+}
+
+function deleteLibrary(name) {
+  if (!confirm(`确定删除题库"${name}"及其进度？`)) return;
+  localStorage.removeItem(getLibKey(name));
+  localStorage.removeItem(getLibDataKey(name));
+  renderLibraryList();
+}
+
+function backToImport() {
+  document.getElementById('studyScreen').classList.add('hidden');
+  document.getElementById('importScreen').classList.remove('hidden');
+  renderLibraryList();
+}
+
+// ============ SMART PARSER ============
+function getParseMode() {
+  return document.querySelector('input[name="parseMode"]:checked').value;
+}
+
+function parseText(text, mode) {
+  text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const quizItems = parseQuiz(text);
+  const knowledgeItems = parseKnowledge(text);
+
+  if (mode === 'quiz') return quizItems.length > 0 ? quizItems : knowledgeItems;
+  if (mode === 'knowledge') return knowledgeItems.length > 0 ? knowledgeItems : quizItems;
+  // auto: return whichever has more items, prefer quiz
+  if (quizItems.length >= knowledgeItems.length && quizItems.length > 0) return quizItems;
+  if (knowledgeItems.length > 0) return knowledgeItems;
+  return quizItems; // fallback
+}
+
+function parseQuiz(text) {
+  const items = [];
+  // Strategy: split by question numbers
+  // Match patterns like: "1." "1、" "1)" "第1题" "Q1." "(1)" "一、" etc.
+  const questionSplits = text.split(/(?=^\s*(?:(?:第?\s*\d+[\.\、\)\]\s题])|(?:[\(（]\s*\d+[\)）])|(?:Q\s*\d+[\.\:])|(?:\d+[\.\、\)\]\s])))/gmi);
+
+  for (const block of questionSplits) {
+    const trimmed = block.trim();
+    if (!trimmed || trimmed.length < 5) continue;
+
+    // Try to extract question text
+    let questionText = '';
+    let rest = '';
+
+    // Remove leading number
+    const qMatch = trimmed.match(/^(?:第?\s*\d+[\.\、\)\]\s题]?\s*[:\：]?|(?:[\(（]\s*\d+[\)）])\s*[:\：]?|Q\s*\d+[\.\:]\s*|(?:\d+[\.\、\)\]\s])\s*)/i);
+    if (qMatch) {
+      rest = trimmed.slice(qMatch[0].length).trim();
+    } else {
+      rest = trimmed;
+    }
+
+    // Extract options A-D
+    const optionPattern = /\n?\s*([A-Da-d])[\.\、\)\]\:：]\s*(.+?)(?=\n\s*[A-Da-d][\.\、\)\]\:：]|\n\s*(?:答案|解析|解答|参考答案|正确答案|answer)[\s\:：]|\n\s*\d+[\.\、\)\]]|\s*$)/gis;
+    const options = [];
+    let optMatch;
+    const optionRegex = /\n?\s*([A-Da-d])[\.\、\)\]\:：]\s*/gi;
+    const optPositions = [];
+
+    while ((optMatch = optionRegex.exec(rest)) !== null) {
+      optPositions.push({ idx: optMatch.index, len: optMatch[0].length, letter: optMatch[1].toUpperCase() });
+    }
+
+    if (optPositions.length >= 2) {
+      // Extract question (everything before first option)
+      questionText = rest.slice(0, optPositions[0].idx).trim().replace(/^[\s\n]+|[\s\n]+$/g, '');
+
+      // Extract each option's text
+      for (let i = 0; i < optPositions.length; i++) {
+        const start = optPositions[i].idx + optPositions[i].len;
+        const end = i + 1 < optPositions.length ? optPositions[i + 1].idx : rest.length;
+        let optText = rest.slice(start, end).trim();
+        // Remove trailing answer/explanation markers
+        optText = optText.replace(/\n\s*(?:答案|解析|解答|参考答案|正确答案|answer).*/gis, '').trim();
+        options.push(optText);
+      }
+    }
+
+    if (!questionText || options.length < 2) continue;
+
+    // Extract answer
+    let answerIdx = -1;
+    const ansMatch = rest.match(/(?:答案|正确答案|参考答案|answer)[\s\:：]*([A-Da-d]+)/i);
+    if (ansMatch) {
+      answerIdx = ansMatch[1].toUpperCase().charCodeAt(0) - 65;
+    }
+
+    // Extract explanation
+    let explanation = '';
+    const explMatch = rest.match(/(?:解析|解答|解释|说明|explanation)[\s\:：]*([\s\S]+?)(?=\n\s*\d+[\.\、\)\]]|\s*$)/i);
+    if (explMatch) {
+      explanation = explMatch[1].trim().replace(/\n\s*$/, '');
+    }
+
+    if (answerIdx < 0 || answerIdx >= options.length) answerIdx = 0;
+
+    // Detect chapter from context
+    let chapter = '题库';
+    const chMatch = trimmed.match(/^(第[一二三四五六七八九十\d]+[章节篇]|[\u4e00-\u9fa5]+章|[\u4e00-\u9fa5]+节)/);
+
+    items.push({
+      chapter: chapter,
+      type: 'quiz',
+      question: questionText,
+      options: options,
+      answer: answerIdx,
+      explanation: explanation
+    });
+  }
+
+  // Assign chapters based on context
+  assignChapters(items, text);
+
+  return items;
+}
+
+function parseKnowledge(text) {
+  const items = [];
+  // Split by markdown headings or numbered items
+  const lines = text.split('\n');
+  let currentChapter = '知识点';
+  let buffer = [];
+  let currentTitle = '';
+
+  function flushItem() {
+    if (currentTitle && buffer.length > 0) {
+      const content = buffer.join('\n').trim();
+      if (content) {
+        items.push({
+          chapter: currentChapter,
+          type: 'knowledge',
+          question: currentTitle,
+          answer: content
+        });
+      }
+    }
+    buffer = [];
+    currentTitle = '';
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Markdown heading
+    const h1 = line.match(/^#\s+(.+)/);
+    const h2 = line.match(/^##\s+(.+)/);
+    const h3 = line.match(/^###\s+(.+)/);
+
+    if (h1) {
+      flushItem();
+      currentChapter = h1[1].trim();
+      continue;
+    }
+    if (h2) {
+      flushItem();
+      currentTitle = h2[1].trim();
+      continue;
+    }
+    if (h3) {
+      flushItem();
+      currentTitle = h3[1].trim();
+      continue;
+    }
+
+    // 【keyword】pattern
+    const bracketMatch = line.match(/^[\s]*[【\[](.+?)[】\]][\s:：]*(.*)/);
+    if (bracketMatch) {
+      flushItem();
+      currentTitle = bracketMatch[1].trim();
+      if (bracketMatch[2].trim()) buffer.push(bracketMatch[2].trim());
+      continue;
+    }
+
+    // 名词：解释 pattern (Chinese colon)
+    const colonMatch = line.match(/^[\s]*([^\s\:：]{2,20})[\s]*[：:]\s*(.+)/);
+    if (colonMatch && !line.match(/^\d+[\.\、]/)) {
+      flushItem();
+      currentTitle = colonMatch[1].trim();
+      buffer.push(colonMatch[2].trim());
+      continue;
+    }
+
+    // Numbered knowledge item like "1. 知识点名称\n内容"
+    const numMatch = line.match(/^[\s]*(\d+)[\.\、\)]\s*(.+)/);
+    if (numMatch && !line.match(/\d+[\.\、\)]\s*.+[A-Da-d][\.\、\)\]\:：]/)) {
+      // Check if this looks like a knowledge item (no options follow)
+      const nextLines = lines.slice(i + 1, i + 4).join(' ');
+      if (!nextLines.match(/[A-Da-d][\.\、\)\]\:：]/)) {
+        flushItem();
+        currentTitle = numMatch[2].trim();
+        continue;
+      }
+    }
+
+    if (currentTitle) {
+      buffer.push(line);
+    }
+  }
+  flushItem();
+
+  return items;
+}
+
+function assignChapters(items, text) {
+  // Try to find chapter headings in the original text
+  const chapterMarkers = [];
+  const lines = text.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(/^(第[一二三四五六七八九十\d]+[章节篇]\s*[\u4e00-\u9fa5A-Za-z\d]*)|([\u4e00-\u9fa5]{2,10}(?:章|节|部分|模块|篇))/);
+    if (m) chapterMarkers.push({ line: i, name: m[0].trim() });
+  }
+
+  if (chapterMarkers.length === 0) return;
+
+  // Map each item to a chapter based on position in text
+  for (const item of items) {
+    const pos = text.indexOf(item.question.slice(0, 15));
+    if (pos >= 0) {
+      const linePos = text.slice(0, pos).split('\n').length;
+      let bestChapter = chapterMarkers[0].name;
+      for (const cm of chapterMarkers) {
+        if (cm.line <= linePos) bestChapter = cm.name;
+      }
+      item.chapter = bestChapter;
+    }
+  }
+}
+
+// ============ FILE HANDLING ============
+const dropZone = document.getElementById('dropZone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+
+function handleFile(file) {
+  if (!file) return;
+  document.getElementById('fileName').textContent = file.name;
+  const ext = file.name.split('.').pop().toLowerCase();
+
+  if (ext === 'docx' || ext === 'doc') {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const arrayBuffer = e.target.result;
+      mammoth.extractRawText({ arrayBuffer: arrayBuffer })
+        .then(function(result) {
+          document.getElementById('textInput').value = result.value;
+        })
+        .catch(function(err) {
+          // Fallback: try as HTML then strip tags
+          mammoth.convertToHtml({ arrayBuffer: arrayBuffer })
+            .then(function(result) {
+              const tmp = document.createElement('div');
+              tmp.innerHTML = result.value;
+              document.getElementById('textInput').value = tmp.textContent || tmp.innerText;
+            })
+            .catch(function() {
+              alert('Word文档解析失败，请确认文件格式正确。');
+            });
+        });
+    };
+    reader.readAsArrayBuffer(file);
+  } else {
+    const reader = new FileReader();
+    reader.onload = e => {
+      document.getElementById('textInput').value = e.target.result;
+    };
+    reader.readAsText(file);
+  }
+}
+
+// ============ IMPORT ============
+function doImport() {
+  const text = document.getElementById('textInput').value.trim();
+  if (!text) { alert('请粘贴文本或上传文件！'); return; }
+  const name = document.getElementById('libName').value.trim() || '未命名题库_' + Date.now();
+
+  const mode = getParseMode();
+  const parsed = parseText(text, mode);
+
+  if (parsed.length === 0) {
+    alert('未能解析出任何题目或知识点，请检查文本格式。');
+    return;
+  }
+
+  // Save data and mastered status
+  localStorage.setItem(getLibDataKey(name), JSON.stringify(parsed));
+  const existing = localStorage.getItem(getLibKey(name));
+  if (!existing) localStorage.setItem(getLibKey(name), '{}');
+
+  loadLibrary(name);
+  document.getElementById('importScreen').classList.add('hidden');
+  document.getElementById('studyScreen').classList.remove('hidden');
+  initChapters();
+  render();
+}
+
+// ============ CHAPTERS ============
+function initChapters() {
+  const chapters = [...new Set(rawData.map(d => d.chapter))];
+  const sel = document.getElementById('chapterFilter');
+  sel.innerHTML = '<option value="all">所有章节</option>';
+  chapters.forEach(ch => {
+    const opt = document.createElement('option');
+    opt.value = ch;
+    opt.textContent = ch;
+    sel.appendChild(opt);
+  });
+  currentChapter = 'all';
+  currentFilter = 'all';
+  currentIndex = 0;
+  // Reset filter buttons
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.className = btn.dataset.filter === 'all'
+      ? 'filter-btn filter-active px-3 py-1 rounded-full text-xs font-medium transition-all whitespace-nowrap'
+      : 'filter-btn px-3 py-1 rounded-full text-xs font-medium transition-all bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 whitespace-nowrap';
+  });
+}
+
+// ============ FILTERING ============
+function getFilteredIndices() {
+  const indices = [];
+  rawData.forEach((item, idx) => {
+    const status = mastered[idx];
+    if (currentFilter === 'mastered' && status !== 'mastered') return;
+    if (currentFilter === 'unmastered' && status !== 'unmastered') return;
+    if (currentChapter !== 'all' && item.chapter !== currentChapter) return;
+    indices.push(idx);
+  });
+  return indices;
+}
+
+// ============ MODE SWITCHING ============
+function switchMode(mode) {
+  currentMode = mode;
+  document.getElementById('modeQuiz').className = mode === 'quiz'
+    ? 'px-3 py-1.5 rounded-lg text-xs font-medium transition-all bg-blue-500 text-white'
+    : 'px-3 py-1.5 rounded-lg text-xs font-medium transition-all bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300';
+  document.getElementById('modeRecite').className = mode === 'recite'
+    ? 'px-3 py-1.5 rounded-lg text-xs font-medium transition-all bg-blue-500 text-white'
+    : 'px-3 py-1.5 rounded-lg text-xs font-medium transition-all bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300';
+  render();
+}
+
+function setFilter(f) {
+  currentFilter = f;
+  currentIndex = 0;
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.className = btn.dataset.filter === f
+      ? 'filter-btn filter-active px-3 py-1 rounded-full text-xs font-medium transition-all whitespace-nowrap'
+      : 'filter-btn px-3 py-1 rounded-full text-xs font-medium transition-all bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 whitespace-nowrap';
+  });
+  render();
+}
+
+function setChapter(ch) {
+  currentChapter = ch;
+  currentIndex = 0;
+  render();
+}
+
+function shuffleData() {
+  // Fisher-Yates shuffle on rawData, remap mastered
+  const oldMastered = { ...mastered };
+  for (let i = rawData.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [rawData[i], rawData[j]] = [rawData[j], rawData[i]];
+    mastered[i] = oldMastered[j] || undefined;
+    mastered[j] = oldMastered[i] || undefined;
+    // Clean undefined
+    if (mastered[i] === undefined) delete mastered[i];
+    if (mastered[j] === undefined) delete mastered[j];
+  }
+  // Reassign chapters
+  initChapters();
+  currentIndex = 0;
+  saveMastered();
+  localStorage.setItem(getLibDataKey(currentLib), JSON.stringify(rawData));
+  render();
+}
+
+function resetProgress() {
+  if (!confirm('确定清空当前题库的所有掌握状态？')) return;
+  mastered = {};
+  saveMastered();
+  render();
+}
+
+// ============ CHAPTER COLORS ============
+const CHAPTER_COLORS = [
+  'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+  'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
+  'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300',
+  'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+  'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',
+  'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300',
+  'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300',
+  'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+  'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300',
+  'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+  'bg-lime-100 text-lime-700 dark:bg-lime-900/40 dark:text-lime-300',
+  'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',
+];
+const chapterColorMap = {};
+let colorIdx = 0;
+function getChapterColor(ch) {
+  if (!chapterColorMap[ch]) {
+    chapterColorMap[ch] = CHAPTER_COLORS[colorIdx % CHAPTER_COLORS.length];
+    colorIdx++;
+  }
+  return chapterColorMap[ch];
+}
+
+// ============ STATS & PROGRESS ============
+function updateStats() {
+  const total = rawData.length;
+  const mc = Object.values(mastered).filter(v => v === 'mastered').length;
+  const rate = total > 0 ? Math.round(mc / total * 100) : 0;
+  document.getElementById('statTotal').textContent = total;
+  document.getElementById('statMastered').textContent = mc;
+  document.getElementById('statRate').textContent = rate + '%';
+}
+
+function updateProgress() {
+  const indices = getFilteredIndices();
+  const total = indices.length;
+  const cur = total > 0 ? currentIndex + 1 : 0;
+  const mc = indices.filter(i => mastered[i] === 'mastered').length;
+  const rate = total > 0 ? Math.round(mc / total * 100) : 0;
+  document.getElementById('progressBar').style.width = (total > 0 ? (cur / total * 100) : 0) + '%';
+  document.getElementById('progressText').textContent = `第 ${cur}/${total} 个 · 掌握率 ${rate}%`;
+  document.getElementById('navIndicator').textContent = `${cur} / ${total}`;
+}
+
+// ============ RENDER ============
+function render() {
+  const indices = getFilteredIndices();
+  const container = document.getElementById('cardContainer');
+  const emptyState = document.getElementById('emptyState');
+
+  if (indices.length === 0) {
+    container.innerHTML = '';
+    emptyState.classList.remove('hidden');
+    updateProgress();
+    updateStats();
+    return;
+  }
+  emptyState.classList.add('hidden');
+
+  if (currentIndex >= indices.length) currentIndex = indices.length - 1;
+  if (currentIndex < 0) currentIndex = 0;
+
+  const originalIdx = indices[currentIndex];
+  const item = rawData[originalIdx];
+
+  if (currentMode === 'quiz') {
+    container.innerHTML = renderQuiz(item, originalIdx);
+  } else {
+    container.innerHTML = renderRecite(item, originalIdx);
+  }
+
+  updateProgress();
+  updateStats();
+}
+
+function renderQuiz(item, originalIdx) {
+  const status = mastered[originalIdx];
+  const statusClass = status === 'mastered' ? 'border-green-400 dark:border-green-600 bg-green-50/50 dark:bg-green-900/20'
+    : status === 'unmastered' ? 'border-amber-400 dark:border-amber-600 bg-amber-50/50 dark:bg-amber-900/20'
+    : 'border-slate-200 dark:border-slate-700';
+
+  let optionsHtml = '';
+  if (item.type === 'quiz' && item.options) {
+    optionsHtml = `<div class="space-y-2 mt-4" id="options-${originalIdx}">
+      ${item.options.map((opt, i) => `
+        <button onclick="answerQuiz(${originalIdx}, ${i})" class="option-btn w-full text-left px-4 py-3 rounded-xl border-2 border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 hover:border-blue-300 dark:hover:border-blue-500 transition-all text-sm text-slate-800 dark:text-slate-200" data-idx="${i}">
+          <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold mr-3">${'ABCD'[i]}</span>${opt}
+        </button>
+      `).join('')}
+    </div>
+    <div id="explanation-${originalIdx}" class="hidden mt-4 p-4 rounded-xl bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 text-sm text-slate-700 dark:text-slate-300">
+      <div class="font-semibold text-blue-700 dark:text-blue-400 mb-1"><i class="fas fa-lightbulb mr-1"></i>解析</div>
+      <div>${item.explanation || ''}</div>
+    </div>`;
+  } else {
+    optionsHtml = `
+      <div class="mt-4">
+        <button onclick="revealAnswer(${originalIdx})" id="revealBtn-${originalIdx}" class="w-full py-3 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-medium text-sm hover:from-blue-600 hover:to-indigo-600 transition-all active:scale-[0.98]">
+          <i class="fas fa-eye mr-2"></i>查看答案
+        </button>
+        <div id="answer-${originalIdx}" class="hidden mt-4 p-4 rounded-xl bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 text-sm text-slate-700 dark:text-slate-300 whitespace-pre-line">
+          ${item.answer}
+        </div>
+      </div>`;
+  }
+
+  return `
+    <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border-2 ${statusClass} p-5 card-hover fade-in transition-colors">
+      <div class="flex items-center justify-between mb-3">
+        <span class="chapter-tag ${getChapterColor(item.chapter)}">${item.chapter}</span>
+        <span class="text-xs text-slate-400">#${originalIdx + 1}</span>
+      </div>
+      <div class="text-base font-semibold text-slate-800 dark:text-slate-100 leading-relaxed">${item.question}</div>
+      ${optionsHtml}
+      <div class="flex gap-3 mt-5 pt-4 border-t border-slate-100 dark:border-slate-700">
+        <button onclick="markStatus(${originalIdx}, 'unmastered')" class="btn-mastered flex-1 py-2.5 rounded-xl text-sm font-medium transition-all ${status === 'unmastered' ? 'bg-amber-500 text-white shadow-md' : 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800'}">
+          <i class="fas fa-xmark mr-1"></i>未掌握
+        </button>
+        <button onclick="markStatus(${originalIdx}, 'mastered')" class="btn-mastered flex-1 py-2.5 rounded-xl text-sm font-medium transition-all ${status === 'mastered' ? 'bg-green-500 text-white shadow-md' : 'bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 border border-green-200 dark:border-green-800'}">
+          <i class="fas fa-check mr-1"></i>已掌握
+        </button>
+      </div>
+    </div>`;
+}
+
+function renderRecite(item, originalIdx) {
+  const status = mastered[originalIdx];
+  const statusClass = status === 'mastered' ? 'border-green-400 dark:border-green-600 bg-green-50/50 dark:bg-green-900/20'
+    : status === 'unmastered' ? 'border-amber-400 dark:border-amber-600 bg-amber-50/50 dark:bg-amber-900/20'
+    : 'border-slate-200 dark:border-slate-700';
+
+  let backContent = '';
+  if (item.type === 'quiz' && item.options) {
+    backContent = `
+      <div class="mt-4 p-4 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800 text-sm text-slate-700 dark:text-slate-300">
+        <div class="font-semibold text-indigo-700 dark:text-indigo-400 mb-2">选项：</div>
+        ${item.options.map((opt, i) => `<div class="py-1 ${i === item.answer ? 'text-green-700 dark:text-green-400 font-bold' : ''}">${i === item.answer ? '✅ ' : ''}${'ABCD'[i]}. ${opt}</div>`).join('')}
+        ${item.explanation ? `<div class="mt-3 pt-3 border-t border-indigo-200 dark:border-indigo-800"><span class="font-semibold text-indigo-700 dark:text-indigo-400">解析：</span>${item.explanation}</div>` : ''}
+      </div>`;
+  } else {
+    backContent = `
+      <div class="mt-4 p-4 rounded-xl bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 text-sm text-slate-700 dark:text-slate-300 whitespace-pre-line">
+        ${item.answer}
+      </div>`;
+  }
+
+  return `
+    <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border-2 ${statusClass} p-5 card-hover fade-in transition-colors">
+      <div class="flex items-center justify-between mb-3">
+        <span class="chapter-tag ${getChapterColor(item.chapter)}">${item.chapter}</span>
+        <span class="text-xs text-slate-400">#${originalIdx + 1}</span>
+      </div>
+      <div class="text-base font-semibold text-slate-800 dark:text-slate-100 leading-relaxed">${item.question}</div>
+      ${backContent}
+      <div class="flex gap-3 mt-5 pt-4 border-t border-slate-100 dark:border-slate-700">
+        <button onclick="markStatus(${originalIdx}, 'unmastered')" class="btn-mastered flex-1 py-2.5 rounded-xl text-sm font-medium transition-all ${status === 'unmastered' ? 'bg-amber-500 text-white shadow-md' : 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800'}">
+          <i class="fas fa-xmark mr-1"></i>未掌握
+        </button>
+        <button onclick="markStatus(${originalIdx}, 'mastered')" class="btn-mastered flex-1 py-2.5 rounded-xl text-sm font-medium transition-all ${status === 'mastered' ? 'bg-green-500 text-white shadow-md' : 'bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 border border-green-200 dark:border-green-800'}">
+          <i class="fas fa-check mr-1"></i>已掌握
+        </button>
+      </div>
+    </div>`;
+}
+
+// ============ INTERACTIONS ============
+function answerQuiz(originalIdx, selected) {
+  const item = rawData[originalIdx];
+  const container = document.getElementById(`options-${originalIdx}`);
+  if (!container) return;
+  const buttons = container.querySelectorAll('.option-btn');
+  buttons.forEach((btn, i) => {
+    btn.classList.add('answered');
+    btn.disabled = true;
+    if (i === item.answer) btn.classList.add('correct');
+    else if (i === selected && i !== item.answer) btn.classList.add('wrong');
+  });
+  const expl = document.getElementById(`explanation-${originalIdx}`);
+  if (expl) expl.classList.remove('hidden');
+}
+
+function revealAnswer(originalIdx) {
+  const el = document.getElementById(`answer-${originalIdx}`);
+  const btn = document.getElementById(`revealBtn-${originalIdx}`);
+  if (el) el.classList.toggle('hidden');
+  if (btn) {
+    btn.innerHTML = el.classList.contains('hidden')
+      ? '<i class="fas fa-eye mr-2"></i>查看答案'
+      : '<i class="fas fa-eye-slash mr-2"></i>隐藏答案';
+  }
+}
+
+function flipCard(originalIdx) {
+  const card = document.getElementById(`flip-${originalIdx}`);
+  if (card) card.querySelector('.flip-inner').classList.toggle('flipped');
+}
+
+function markStatus(originalIdx, status) {
+  if (mastered[originalIdx] === status) {
+    delete mastered[originalIdx];
+  } else {
+    mastered[originalIdx] = status;
+  }
+  saveMastered();
+  render();
+}
+
+function goNext() {
+  const indices = getFilteredIndices();
+  if (currentIndex < indices.length - 1) {
+    currentIndex++;
+    render();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+}
+
+function goPrev() {
+  if (currentIndex > 0) {
+    currentIndex--;
+    render();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+}
+
+// Keyboard
+document.addEventListener('keydown', (e) => {
+  if (document.getElementById('studyScreen').classList.contains('hidden')) return;
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); goNext(); }
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); goPrev(); }
+  if (e.key === ' ') {
+    e.preventDefault();
+    // Flip current card in recite mode
+    if (currentMode === 'recite') {
+      const indices = getFilteredIndices();
+      if (indices.length > 0) {
+        const idx = indices[currentIndex];
+        flipCard(idx);
+      }
+    }
+  }
+  if (e.key === 'j' || e.key === 'J') {
+    const indices = getFilteredIndices();
+    if (indices.length > 0) markStatus(indices[currentIndex], 'unmastered');
+  }
+  if (e.key === 'k' || e.key === 'K') {
+    const indices = getFilteredIndices();
+    if (indices.length > 0) markStatus(indices[currentIndex], 'mastered');
+  }
+});
+
+// Touch swipe
+let touchStartX = 0;
+document.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; });
+document.addEventListener('touchend', e => {
+  if (document.getElementById('studyScreen').classList.contains('hidden')) return;
+  const diff = touchStartX - e.changedTouches[0].clientX;
+  if (Math.abs(diff) > 80) {
+    if (diff > 0) goNext();
+    else goPrev();
+  }
+});
+
+// ============ INIT ============
+renderLibraryList();
+</script>
+</body>
+</html>
