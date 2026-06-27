@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>功能解剖学期末复习 - 刷题与背诵</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; }
+  .fade-in { animation: fadeIn 0.3s ease-in; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  .card-hover { transition: all 0.2s; }
+  .card-hover:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,0.1); }
+  .option-btn { transition: all 0.15s; }
+  .option-btn:hover:not(.answered) { background: #e0e7ff; }
+  .option-btn.correct { background: #dcfce7 !important; border-color: #22c55e !important; color: #166534; }
+  .option-btn.wrong { background: #fee2e2 !important; border-color: #ef4444 !important; color: #991b1b; }
+  .progress-fill { transition: width 0.5s ease; }
+  .btn-mastered { transition: all 0.2s; }
+  .btn-mastered:hover { transform: scale(1.05); }
+  .filter-active { background: #3b82f6; color: white; }
+  .reveal-content { max-height: 0; overflow: hidden; transition: max-height 0.4s ease, padding 0.3s ease; }
+  .reveal-content.show { max-height: 800px; }
+  .chapter-tag { display: inline-block; padding: 2px 10px; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; }
+  .stats-card { backdrop-filter: blur(10px); }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+</style>
+</head>
+<body class="bg-gradient-to-br from-slate-50 to-blue-50 min-h-screen">
+
+<!-- Header -->
+<header class="bg-white/80 backdrop-blur-md shadow-sm sticky top-0 z-50">
+  <div class="max-w-3xl mx-auto px-4 py-3">
+    <div class="flex items-center justify-between mb-2">
+      <h1 class="text-lg font-bold text-slate-800"><i class="fas fa-bone text-blue-500 mr-2"></i>功能解剖学期末复习</h1>
+      <div class="flex gap-2">
+        <button id="modeQuiz" onclick="switchMode('quiz')" class="px-3 py-1.5 rounded-lg text-sm font-medium transition-all bg-blue-500 text-white">
+          <i class="fas fa-pen-to-square mr-1"></i>刷题
+        </button>
+        <button id="modeRecite" onclick="switchMode('recite')" class="px-3 py-1.5 rounded-lg text-sm font-medium transition-all bg-slate-200 text-slate-600">
+          <i class="fas fa-book-open mr-1"></i>背诵
+        </button>
+      </div>
+    </div>
+    <!-- Progress -->
+    <div class="flex items-center gap-3">
+      <div class="flex-1 bg-slate-200 rounded-full h-2 overflow-hidden">
+        <div id="progressBar" class="progress-fill h-full bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full" style="width:0%"></div>
+      </div>
+      <span id="progressText" class="text-xs text-slate-500 whitespace-nowrap">0/0</span>
+    </div>
+    <!-- Filter -->
+    <div class="flex gap-2 mt-2 overflow-x-auto pb-1">
+      <button onclick="setFilter('all')" data-filter="all" class="filter-btn filter-active px-3 py-1 rounded-full text-xs font-medium transition-all whitespace-nowrap">全部</button>
+      <button onclick="setFilter('unmastered')" data-filter="unmastered" class="filter-btn px-3 py-1 rounded-full text-xs font-medium transition-all bg-slate-200 text-slate-600 whitespace-nowrap">❌ 未掌握</button>
+      <button onclick="setFilter('mastered')" data-filter="mastered" class="filter-btn px-3 py-1 rounded-full text-xs font-medium transition-all bg-slate-200 text-slate-600 whitespace-nowrap">✅ 已掌握</button>
+      <select id="chapterFilter" onchange="setChapter(this.value)" class="px-2 py-1 rounded-full text-xs bg-slate-200 text-slate-600 border-0 outline-none">
+        <option value="all">所有章节</option>
+      </select>
+    </div>
+  </div>
+</header>
+
+<!-- Stats Bar -->
+<div class="max-w-3xl mx-auto px-4 mt-3">
+  <div class="grid grid-cols-3 gap-3">
+    <div class="stats-card bg-white/70 rounded-xl p-3 text-center border border-slate-100">
+      <div class="text-2xl font-bold text-blue-600" id="statTotal">0</div>
+      <div class="text-xs text-slate-500">总数</div>
+    </div>
+    <div class="stats-card bg-white/70 rounded-xl p-3 text-center border border-slate-100">
+      <div class="text-2xl font-bold text-green-600" id="statMastered">0</div>
+      <div class="text-xs text-slate-500">已掌握</div>
+    </div>
+    <div class="stats-card bg-white/70 rounded-xl p-3 text-center border border-slate-100">
+      <div class="text-2xl font-bold text-amber-500" id="statRate">0%</div>
+      <div class="text-xs text-slate-500">掌握率</div>
+    </div>
+  </div>
+</div>
+
+<!-- Main Content -->
+<main class="max-w-3xl mx-auto px-4 py-4 pb-24">
+  <div id="cardContainer" class="fade-in"></div>
+  <!-- Empty State -->
+  <div id="emptyState" class="hidden text-center py-16">
+    <i class="fas fa-filter-circle-xmark text-4xl text-slate-300 mb-3"></i>
+    <p class="text-slate-400">当前筛选条件下没有内容</p>
+  </div>
+</main>
+
+<!-- Bottom Nav -->
+<nav class="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-slate-200 z-50">
+  <div class="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
+    <button onclick="goPrev()" id="btnPrev" class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-sm transition-all active:scale-95">
+      <i class="fas fa-chevron-left"></i>上一个
+    </button>
+    <span id="navIndicator" class="text-sm text-slate-500 font-medium">1 / 1</span>
+    <button onclick="goNext()" id="btnNext" class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-500 hover:bg-blue-600 text-white font-medium text-sm transition-all active:scale-95">
+      下一个<i class="fas fa-chevron-right"></i>
+    </button>
+  </div>
+</nav>
+
+<script>
+// ============ DATA ============
+const RAW_DATA = [
+  // 第一章 概述
+  {chapter:"第一章 概述", type:"knowledge", question:"单轴关节、双轴关节、多轴关节分别有哪些典型例子？", answer:"单轴关节：如肘关节（屈伸）、近侧桡尺关节（旋转）。\n双轴关节：腕关节、拇指腕掌关节。\n多轴关节：肩关节、髋关节。"},
+  {chapter:"第一章 概述", type:"knowledge", question:"运动轴与运动面的对应关系是什么？", answer:"矢状面-额状轴：屈伸；\n额状面-矢状轴：内收外展；\n水平面-垂直轴：旋转。"},
+  {chapter:"第一章 概述", type:"knowledge", question:"功能解剖学的核心强调什么？", answer:"功能解剖学强调运动发生的轴与面对应关系，是病例分析的重要基础。"},
+  // 第二章 髋关节
+  {chapter:"第二章 髋关节", type:"knowledge", question:"髋关节与肩关节在灵活性和稳定性方面有何区别？", answer:"肩关节灵活性大但稳定性差；髋关节髋臼深、稳定性高、活动度相对较小。"},
+  {chapter:"第二章 髋关节", type:"knowledge", question:"股骨颈骨折的典型临床表现是什么？", answer:"患肢短缩、外旋畸形、腹股沟疼痛，易导致股骨头缺血坏死。"},
+  {chapter:"第二章 髋关节", type:"knowledge", question:"颈干角的正常范围是多少？增大和减小分别称为什么？", answer:"颈干角正常约120°-135°；增大为髋外翻，减小为髋内翻。"},
+  {chapter:"第二章 髋关节", type:"knowledge", question:"髋关节置换术后早期应避免哪些动作？", answer:"髋屈曲>90°、内收超过中线、内旋。"},
+  {chapter:"第二章 髋关节", type:"quiz", question:"以下哪块肌肉不是髋关节的重要肌群？", options:["臀大肌（Gluteus maximus）","髂腰肌（Iliopsoas）","梨状肌（Piriformis）","肱二头肌（Biceps brachii）"], answer:3, explanation:"肱二头肌是上臂肌肉，不属于髋关节肌群。臀大肌、髂腰肌、梨状肌均为髋关节重要肌群。"},
+  {chapter:"第二章 髋关节", type:"quiz", question:"Trendelenburg征阳性提示哪块肌肉无力？", options:["臀大肌","臀中肌或臀小肌","髂腰肌","股四头肌"], answer:1, explanation:"Trendelenburg征阳性提示臀中肌或臀小肌无力，导致骨盆在站立相无法维持水平。"},
+  // 骨盆与大腿
+  {chapter:"骨盆与大腿", type:"knowledge", question:"骨盆的主要承重韧带有哪些？", answer:"骶结节韧带、骶棘韧带、髂腰韧带。"},
+  {chapter:"骨盆与大腿", type:"knowledge", question:"梨状肌综合征的机制和表现是什么？", answer:"梨状肌痉挛压迫坐骨神经，引起臀部疼痛及下肢放射痛。"},
+  // 膝关节
+  {chapter:"膝关节", type:"quiz", question:"前交叉韧带（ACL）损伤的查体方法有哪些？", options:["Lachman试验、前抽屉试验","后抽屉试验","McMurray试验","Apley试验"], answer:0, explanation:"ACL查体主要用Lachman试验和前抽屉试验。后抽屉试验用于检查PCL。"},
+  {chapter:"膝关节", type:"quiz", question:"膝关节三联征（O'Donoghue三联征）包括哪些损伤？", options:["ACL+外侧副韧带+外侧半月板","ACL+内侧副韧带+内侧半月板","PCL+内侧副韧带+内侧半月板","ACL+PCL+髌韧带"], answer:1, explanation:"膝关节三联征：ACL损伤+内侧副韧带损伤+内侧半月板损伤。"},
+  {chapter:"膝关节", type:"knowledge", question:"ACL缺失后的康复训练重点是什么？", answer:"强化腘绳肌训练，减少胫骨前移；同时增强股四头肌与髋周稳定肌。"},
+  {chapter:"膝关节", type:"quiz", question:"后交叉韧带（PCL）损伤的查体方法是什么？", options:["Lachman试验","前抽屉试验","后抽屉试验","侧方应力试验"], answer:2, explanation:"PCL查体主要用后抽屉试验。"},
+  // 踝关节与足
+  {chapter:"踝关节与足", type:"knowledge", question:"踝关节的重要稳定结构有哪些？", answer:"三角韧带、距腓前韧带、跟腓韧带。"},
+  {chapter:"踝关节与足", type:"quiz", question:"胫骨后肌的作用是什么？", options:["足外翻、背屈","足内翻、跖屈、维持足弓","足外翻、跖屈","足内翻、背屈"], answer:1, explanation:"胫骨后肌作用：足内翻、跖屈、维持足弓。"},
+  {chapter:"踝关节与足", type:"quiz", question:"胫骨前肌由哪条神经支配？", options:["胫神经","腓浅神经","腓深神经","隐神经"], answer:2, explanation:"胫前肌由腓深神经支配。"},
+  {chapter:"踝关节与足", type:"knowledge", question:"踝管综合征的受压神经和影响区域是什么？", answer:"胫神经受压，影响足底内侧神经和外侧神经分布区域感觉。"},
+  // 肩关节与上臂
+  {chapter:"肩关节与上臂", type:"knowledge", question:"肩关节前脱位的发生机制是什么？", answer:"关节囊前下方薄弱，外展外旋时易脱位。肩关节前脱位最常见。"},
+  {chapter:"肩关节与上臂", type:"quiz", question:"肩袖（Rotator Cuff）由哪四块肌肉组成？", options:["冈上肌、冈下肌、大圆肌、肩胛下肌","冈上肌、冈下肌、小圆肌、肩胛下肌","冈上肌、三角肌、小圆肌、肩胛下肌","冈上肌、冈下肌、小圆肌、大圆肌"], answer:1, explanation:"肩袖组成：冈上肌、冈下肌、小圆肌、肩胛下肌。"},
+  {chapter:"肩关节与上臂", type:"knowledge", question:"肩袖的核心功能是什么？", answer:"动态稳定肱骨头，维持肩关节中心化。"},
+  // 肘部与前臂
+  {chapter:"肘部与前臂", type:"quiz", question:"屈肘的原动肌是哪块？", options:["肱二头肌","肱肌","肱桡肌","旋前圆肌"], answer:1, explanation:"屈肘原动肌是肱肌；辅助肌为肱二头肌、肱桡肌。"},
+  {chapter:"肘部与前臂", type:"quiz", question:"伸肘的原动肌是哪块？", options:["肱肌","肱桡肌","肱三头肌","肘肌"], answer:2, explanation:"伸肘原动肌是肱三头肌。"},
+  {chapter:"肘部与前臂", type:"knowledge", question:"肘关节内侧和外侧副韧带损伤分别会导致什么不稳？", answer:"内侧副韧带损伤可出现肘内侧不稳；外侧副韧带损伤可出现后外旋不稳。"},
+  // 腕关节与手
+  {chapter:"腕关节与手", type:"quiz", question:"正中神经损伤的典型畸形是什么？", options:["爪形手","垂腕","猿手畸形","锤状指"], answer:2, explanation:"正中神经损伤：猿手畸形、鱼际肌萎缩。"},
+  {chapter:"腕关节与手", type:"quiz", question:"尺神经损伤的典型畸形是什么？", options:["猿手畸形","垂腕","爪形手","扳机指"], answer:2, explanation:"尺神经损伤：爪形手。"},
+  {chapter:"腕关节与手", type:"quiz", question:"桡神经损伤的典型畸形是什么？", options:["猿手畸形","垂腕","爪形手","腕管综合征"], answer:1, explanation:"桡神经损伤：垂腕。"},
+  {chapter:"腕关节与手", type:"knowledge", question:"上肢三大神经（正中神经、尺神经、桡神经）损伤各有什么典型表现？", answer:"正中神经损伤：猿手畸形、鱼际肌萎缩。\n尺神经损伤：爪形手。\n桡神经损伤：垂腕。\n需掌握各神经支配肌群与感觉区域的对应关系。"},
+  // 颈部与脊柱
+  {chapter:"颈部与脊柱", type:"knowledge", question:"颈前肌和颈后肌的主要功能分别是什么？", answer:"颈前肌主要负责屈颈；颈后肌主要负责伸颈。"},
+  {chapter:"颈部与脊柱", type:"quiz", question:"神经根型颈椎病中，C6神经根受累会影响什么？", options:["三角肌和肩部感觉","肱二头肌及拇指区感觉","肱三头肌及中指感觉","手内在肌"], answer:1, explanation:"C5影响三角肌；C6影响肱二头肌及拇指区感觉；C7影响肱三头肌及中指感觉；C8影响手内在肌。"},
+  {chapter:"颈部与脊柱", type:"quiz", question:"神经根型颈椎病中，C7神经根受累会影响什么？", options:["三角肌","肱二头肌及拇指区感觉","肱三头肌及中指感觉","手内在肌"], answer:2, explanation:"C7影响肱三头肌及中指感觉。"},
+  {chapter:"颈部与脊柱", type:"quiz", question:"以下哪个不是颈椎病的常见查体方法？", options:["Spurling试验","臂丛牵拉试验","Lachman试验","椎间孔挤压试验"], answer:2, explanation:"Lachman试验用于检查膝关节ACL，不是颈椎病查体方法。"},
+  {chapter:"颈部与脊柱", type:"knowledge", question:"为什么L4-L5和L5-S1是椎间盘突出的高发节段？", answer:"承受载荷最大、活动度大、后纵韧带侧方薄弱。"},
+  // 胸部（呼吸模块）
+  {chapter:"胸部（呼吸模块）", type:"quiz", question:"膈肌瘫痪时会出现什么呼吸异常？", options:["呼吸加快","反常呼吸，吸气效率下降","呼吸暂停","呼气困难"], answer:1, explanation:"膈肌瘫痪时出现反常呼吸，吸气效率下降。"},
+  {chapter:"胸部（呼吸模块）", type:"knowledge", question:"肋间肌瘫痪对呼吸有什么影响？", answer:"肋间肌瘫痪时胸廓扩张受限。"},
+  {chapter:"胸部（呼吸模块）", type:"quiz", question:"连枷胸的定义和表现是什么？", options:["单根肋骨骨折，局部疼痛","多根肋骨双处骨折，出现反常呼吸运动","胸骨骨折，皮下气肿","肋软骨脱位，呼吸困难"], answer:1, explanation:"连枷胸：多根肋骨双处骨折，出现反常呼吸运动，是严重胸部损伤的重要体征。"},
+  // 背部与腹部
+  {chapter:"背部与腹部", type:"quiz", question:"背阔肌的功能是什么？", options:["屈、外展、外旋肩关节","伸、内收、内旋肩关节","伸、外展、内旋肩关节","屈、内收、外旋肩关节"], answer:1, explanation:"背阔肌：伸、内收、内旋肩关节。"},
+  {chapter:"背部与腹部", type:"quiz", question:"斜方肌的功能是什么？", options:["下降、前伸、下回旋肩胛骨","上提、后缩、上回旋肩胛骨","上提、前伸、下回旋肩胛骨","下降、后缩、上回旋肩胛骨"], answer:1, explanation:"斜方肌：上提、后缩、上回旋肩胛骨。"},
+  {chapter:"背部与腹部", type:"quiz", question:"前锯肌瘫痪（胸长神经损伤）会导致什么体征？", options:["翼状肩胛","方形肩","垂腕","猿手"], answer:0, explanation:"前锯肌瘫痪（胸长神经损伤）可导致翼状肩胛。"},
+  {chapter:"背部与腹部", type:"knowledge", question:"翼状肩胛的查体方法是什么？", answer:"翼状肩胛患者推墙试验阳性。"},
+  // 高频英文肌肉 - 用quiz形式
+  {chapter:"高频英文肌肉", type:"quiz", question:"Deltoid对应的中文肌肉名称是什么？", options:["冈上肌","三角肌","斜方肌","菱形肌"], answer:1, explanation:"Deltoid = 三角肌"},
+  {chapter:"高频英文肌肉", type:"quiz", question:"Biceps brachii对应的中文名称是什么？", options:["肱三头肌","肱肌","肱二头肌","肱桡肌"], answer:2, explanation:"Biceps brachii = 肱二头肌"},
+  {chapter:"高频英文肌肉", type:"quiz", question:"Triceps brachii对应的中文名称是什么？", options:["肱二头肌","肱三头肌","三角肌","冈下肌"], answer:1, explanation:"Triceps brachii = 肱三头肌"},
+  {chapter:"高频英文肌肉", type:"quiz", question:"Quadriceps femoris对应的中文名称是什么？", options:["腘绳肌群","腓肠肌","股四头肌","臀大肌"], answer:2, explanation:"Quadriceps femoris = 股四头肌"},
+  {chapter:"高频英文肌肉", type:"quiz", question:"Hamstrings对应的中文名称是什么？", options:["股四头肌","腘绳肌群","腓肠肌","比目鱼肌"], answer:1, explanation:"Hamstrings = 腘绳肌群"},
+  {chapter:"高频英文肌肉", type:"quiz", question:"Tibialis anterior对应的中文名称是什么？", options:["胫骨后肌","胫前肌","腓骨长肌","腓肠肌"], answer:1, explanation:"Tibialis anterior = 腈前肌"},
+  {chapter:"高频英文肌肉", type:"quiz", question:"Tibialis posterior对应的中文名称是什么？", options:["胫前肌","比目鱼肌","胫骨后肌","腓肠肌"], answer:2, explanation:"Tibialis posterior = 胫骨后肌"},
+  {chapter:"高频英文肌肉", type:"quiz", question:"Gastrocnemius对应的中文名称是什么？", options:["比目鱼肌","腓肠肌","胫前肌","跖肌"], answer:1, explanation:"Gastrocnemius = 腓肠肌"},
+  {chapter:"高频英文肌肉", type:"quiz", question:"Soleus对应的中文名称是什么？", options:["腓肠肌","跖肌","比目鱼肌","胫骨后肌"], answer:2, explanation:"Soleus = 比目鱼肌"},
+  {chapter:"高频英文肌肉", type:"quiz", question:"Piriformis对应的中文名称是什么？", options:["髂腰肌","阔筋膜张肌","臀中肌","梨状肌"], answer:3, explanation:"Piriformis = 梨状肌"},
+  {chapter:"高频英文肌肉", type:"quiz", question:"Tensor fasciae latae对应的中文名称是什么？", options:["缝匠肌","阔筋膜张肌","股薄肌","髂腰肌"], answer:1, explanation:"Tensor fasciae latae = 阔筋膜张肌"},
+  {chapter:"高频英文肌肉", type:"quiz", question:"Gluteus maximus对应的中文名称是什么？", options:["臀中肌","臀小肌","臀大肌","梨状肌"], answer:2, explanation:"Gluteus maximus = 臀大肌"},
+  {chapter:"高频英文肌肉", type:"quiz", question:"Gluteus medius对应的中文名称是什么？", options:["臀大肌","臀中肌","臀小肌","阔筋膜张肌"], answer:1, explanation:"Gluteus medius = 臀中肌"},
+  {chapter:"高频英文肌肉", type:"quiz", question:"Iliopsoas对应的中文名称是什么？", options:["腰方肌","竖脊肌","髂腰肌","腰大肌"], answer:2, explanation:"Iliopsoas = 髂腰肌"},
+];
+
+// ============ STATE ============
+let currentMode = 'quiz';
+let currentFilter = 'all';
+let currentChapter = 'all';
+let currentIndex = 0;
+let mastered = JSON.parse(localStorage.getItem('anatomy_mastered') || '{}');
+
+// Get chapters
+const chapters = [...new Set(RAW_DATA.map(d => d.chapter))];
+
+// Init chapter filter
+const chapterSelect = document.getElementById('chapterFilter');
+chapters.forEach(ch => {
+  const opt = document.createElement('option');
+  opt.value = ch;
+  opt.textContent = ch;
+  chapterSelect.appendChild(opt);
+});
+
+function saveMastered() {
+  localStorage.setItem('anatomy_mastered', JSON.stringify(mastered));
+}
+
+function getFilteredData() {
+  return RAW_DATA.filter((item, idx) => {
+    const status = mastered[idx];
+    if (currentFilter === 'mastered' && status !== 'mastered') return false;
+    if (currentFilter === 'unmastered' && status !== 'unmastered') return false;
+    if (currentChapter !== 'all' && item.chapter !== currentChapter) return false;
+    return true;
+  });
+}
+
+function getFilteredIndices() {
+  const indices = [];
+  RAW_DATA.forEach((item, idx) => {
+    const status = mastered[idx];
+    if (currentFilter === 'mastered' && status !== 'mastered') return;
+    if (currentFilter === 'unmastered' && status !== 'unmastered') return;
+    if (currentChapter !== 'all' && item.chapter !== currentChapter) return;
+    indices.push(idx);
+  });
+  return indices;
+}
+
+function switchMode(mode) {
+  currentMode = mode;
+  document.getElementById('modeQuiz').className = mode === 'quiz'
+    ? 'px-3 py-1.5 rounded-lg text-sm font-medium transition-all bg-blue-500 text-white'
+    : 'px-3 py-1.5 rounded-lg text-sm font-medium transition-all bg-slate-200 text-slate-600';
+  document.getElementById('modeRecite').className = mode === 'recite'
+    ? 'px-3 py-1.5 rounded-lg text-sm font-medium transition-all bg-blue-500 text-white'
+    : 'px-3 py-1.5 rounded-lg text-sm font-medium transition-all bg-slate-200 text-slate-600';
+  render();
+}
+
+function setFilter(f) {
+  currentFilter = f;
+  currentIndex = 0;
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.className = btn.dataset.filter === f
+      ? 'filter-btn filter-active px-3 py-1 rounded-full text-xs font-medium transition-all whitespace-nowrap'
+      : 'filter-btn px-3 py-1 rounded-full text-xs font-medium transition-all bg-slate-200 text-slate-600 whitespace-nowrap';
+  });
+  render();
+}
+
+function setChapter(ch) {
+  currentChapter = ch;
+  currentIndex = 0;
+  render();
+}
+
+function getChapterColor(chapter) {
+  const colors = {
+    '第一章 概述': 'bg-blue-100 text-blue-700',
+    '第二章 髋关节': 'bg-purple-100 text-purple-700',
+    '骨盆与大腿': 'bg-pink-100 text-pink-700',
+    '膝关节': 'bg-red-100 text-red-700',
+    '踝关节与足': 'bg-orange-100 text-orange-700',
+    '肩关节与上臂': 'bg-teal-100 text-teal-700',
+    '肘部与前臂': 'bg-cyan-100 text-cyan-700',
+    '腕关节与手': 'bg-emerald-100 text-emerald-700',
+    '颈部与脊柱': 'bg-indigo-100 text-indigo-700',
+    '胸部（呼吸模块）': 'bg-amber-100 text-amber-700',
+    '背部与腹部': 'bg-lime-100 text-lime-700',
+    '高频英文肌肉': 'bg-violet-100 text-violet-700',
+  };
+  return colors[chapter] || 'bg-slate-100 text-slate-700';
+}
+
+function updateStats() {
+  const total = RAW_DATA.length;
+  const masteredCount = Object.values(mastered).filter(v => v === 'mastered').length;
+  const rate = total > 0 ? Math.round(masteredCount / total * 100) : 0;
+  document.getElementById('statTotal').textContent = total;
+  document.getElementById('statMastered').textContent = masteredCount;
+  document.getElementById('statRate').textContent = rate + '%';
+}
+
+function updateProgress() {
+  const indices = getFilteredIndices();
+  const total = indices.length;
+  const current = total > 0 ? currentIndex + 1 : 0;
+  const masteredInFilter = indices.filter(i => mastered[i] === 'mastered').length;
+  const rate = total > 0 ? Math.round(masteredInFilter / total * 100) : 0;
+  
+  document.getElementById('progressBar').style.width = (total > 0 ? (currentIndex + 1) / total * 100 : 0) + '%';
+  document.getElementById('progressText').textContent = `第 ${current}/${total} 个 · 掌握率 ${rate}%`;
+  document.getElementById('navIndicator').textContent = `${current} / ${total}`;
+}
+
+function renderQuiz(item, originalIdx) {
+  const status = mastered[originalIdx];
+  const statusClass = status === 'mastered' ? 'border-green-400 bg-green-50/50' : status === 'unmastered' ? 'border-amber-400 bg-amber-50/50' : 'border-slate-200';
+  
+  let optionsHtml = '';
+  if (item.type === 'quiz' && item.options) {
+    optionsHtml = `<div class="space-y-2 mt-4" id="options-${originalIdx}">
+      ${item.options.map((opt, i) => `
+        <button onclick="answerQuiz(${originalIdx}, ${i})" class="option-btn w-full text-left px-4 py-3 rounded-xl border-2 border-slate-200 bg-white hover:border-blue-300 transition-all text-sm" data-idx="${i}">
+          <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-slate-100 text-slate-600 text-xs font-bold mr-3">${'ABCD'[i]}</span>${opt}
+        </button>
+      `).join('')}
+    </div>
+    <div id="explanation-${originalIdx}" class="hidden mt-4 p-4 rounded-xl bg-blue-50 border border-blue-200 text-sm text-slate-700">
+      <div class="font-semibold text-blue-700 mb-1"><i class="fas fa-lightbulb mr-1"></i>解析</div>
+      <div>${item.explanation || ''}</div>
+    </div>`;
+  } else {
+    // knowledge item in quiz mode - show as flashcard with question
+    optionsHtml = `
+      <div class="mt-4">
+        <button onclick="revealAnswer(${originalIdx})" id="revealBtn-${originalIdx}" class="w-full py-3 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-medium text-sm hover:from-blue-600 hover:to-indigo-600 transition-all active:scale-98">
+          <i class="fas fa-eye mr-2"></i>查看答案
+        </button>
+        <div id="answer-${originalIdx}" class="hidden mt-4 p-4 rounded-xl bg-green-50 border border-green-200 text-sm text-slate-700 whitespace-pre-line">
+          ${item.answer}
+        </div>
+      </div>`;
+  }
+
+  return `
+    <div class="bg-white rounded-2xl shadow-sm border-2 ${statusClass} p-5 card-hover fade-in">
+      <div class="flex items-center justify-between mb-3">
+        <span class="chapter-tag ${getChapterColor(item.chapter)}">${item.chapter}</span>
+        <span class="text-xs text-slate-400">#${originalIdx + 1}</span>
+      </div>
+      <div class="text-base font-semibold text-slate-800 leading-relaxed">${item.question}</div>
+      ${optionsHtml}
+      <div class="flex gap-3 mt-5 pt-4 border-t border-slate-100">
+        <button onclick="markStatus(${originalIdx}, 'unmastered')" class="btn-mastered flex-1 py-2.5 rounded-xl text-sm font-medium transition-all ${status === 'unmastered' ? 'bg-amber-500 text-white shadow-md' : 'bg-amber-50 text-amber-600 border border-amber-200'}">
+          <i class="fas fa-xmark mr-1"></i>未掌握
+        </button>
+        <button onclick="markStatus(${originalIdx}, 'mastered')" class="btn-mastered flex-1 py-2.5 rounded-xl text-sm font-medium transition-all ${status === 'mastered' ? 'bg-green-500 text-white shadow-md' : 'bg-green-50 text-green-600 border border-green-200'}">
+          <i class="fas fa-check mr-1"></i>已掌握
+        </button>
+      </div>
+    </div>`;
+}
+
+function renderRecite(item, originalIdx) {
+  const status = mastered[originalIdx];
+  const statusClass = status === 'mastered' ? 'border-green-400 bg-green-50/50' : status === 'unmastered' ? 'border-amber-400 bg-amber-50/50' : 'border-slate-200';
+  
+  let content = '';
+  if (item.type === 'quiz') {
+    // In recite mode, show quiz as knowledge card - directly show answer
+    content = `
+      <div class="mt-4">
+        <div class="p-4 rounded-xl bg-indigo-50 border border-indigo-200 text-sm text-slate-700">
+          <div class="font-semibold text-indigo-700 mb-2">选项：</div>
+          ${item.options.map((opt, i) => `<div class="py-1 ${i === item.answer ? 'text-green-700 font-bold' : ''}">${i === item.answer ? '✅ ' : ''}${'ABCD'[i]}. ${opt}</div>`).join('')}
+          ${item.explanation ? `<div class="mt-3 pt-3 border-t border-indigo-200"><span class="font-semibold text-indigo-700">解析：</span>${item.explanation}</div>` : ''}
+        </div>
+      </div>`;
+  } else {
+    content = `
+      <div class="mt-4 p-4 rounded-xl bg-green-50 border border-green-200 text-sm text-slate-700 whitespace-pre-line">
+        ${item.answer}
+      </div>`;
+  }
+
+  return `
+    <div class="bg-white rounded-2xl shadow-sm border-2 ${statusClass} p-5 card-hover fade-in">
+      <div class="flex items-center justify-between mb-3">
+        <span class="chapter-tag ${getChapterColor(item.chapter)}">${item.chapter}</span>
+        <span class="text-xs text-slate-400">#${originalIdx + 1}</span>
+      </div>
+      <div class="text-base font-semibold text-slate-800 leading-relaxed">${item.question}</div>
+      ${content}
+      <div class="flex gap-3 mt-5 pt-4 border-t border-slate-100">
+        <button onclick="markStatus(${originalIdx}, 'unmastered')" class="btn-mastered flex-1 py-2.5 rounded-xl text-sm font-medium transition-all ${status === 'unmastered' ? 'bg-amber-500 text-white shadow-md' : 'bg-amber-50 text-amber-600 border border-amber-200'}">
+          <i class="fas fa-xmark mr-1"></i>未掌握
+        </button>
+        <button onclick="markStatus(${originalIdx}, 'mastered')" class="btn-mastered flex-1 py-2.5 rounded-xl text-sm font-medium transition-all ${status === 'mastered' ? 'bg-green-500 text-white shadow-md' : 'bg-green-50 text-green-600 border border-green-200'}">
+          <i class="fas fa-check mr-1"></i>已掌握
+        </button>
+      </div>
+    </div>`;
+}
+
+function render() {
+  const indices = getFilteredIndices();
+  const container = document.getElementById('cardContainer');
+  const emptyState = document.getElementById('emptyState');
+  
+  if (indices.length === 0) {
+    container.innerHTML = '';
+    emptyState.classList.remove('hidden');
+    updateProgress();
+    updateStats();
+    return;
+  }
+  emptyState.classList.add('hidden');
+  
+  if (currentIndex >= indices.length) currentIndex = indices.length - 1;
+  if (currentIndex < 0) currentIndex = 0;
+  
+  const originalIdx = indices[currentIndex];
+  const item = RAW_DATA[originalIdx];
+  
+  if (currentMode === 'quiz') {
+    container.innerHTML = renderQuiz(item, originalIdx);
+  } else {
+    container.innerHTML = renderRecite(item, originalIdx);
+  }
+  
+  updateProgress();
+  updateStats();
+}
+
+function answerQuiz(originalIdx, selected) {
+  const item = RAW_DATA[originalIdx];
+  const container = document.getElementById(`options-${originalIdx}`);
+  if (!container) return;
+  
+  const buttons = container.querySelectorAll('.option-btn');
+  buttons.forEach((btn, i) => {
+    btn.classList.add('answered');
+    btn.disabled = true;
+    if (i === item.answer) btn.classList.add('correct');
+    else if (i === selected && i !== item.answer) btn.classList.add('wrong');
+  });
+  
+  const expl = document.getElementById(`explanation-${originalIdx}`);
+  if (expl) expl.classList.remove('hidden');
+}
+
+function revealAnswer(originalIdx) {
+  const el = document.getElementById(`answer-${originalIdx}`);
+  const btn = document.getElementById(`revealBtn-${originalIdx}`);
+  if (el) el.classList.toggle('hidden');
+  if (btn) {
+    btn.innerHTML = el.classList.contains('hidden')
+      ? '<i class="fas fa-eye mr-2"></i>查看答案'
+      : '<i class="fas fa-eye-slash mr-2"></i>隐藏答案';
+  }
+}
+
+function revealRecite(originalIdx) {
+  const el = document.getElementById(`reciteContent-${originalIdx}`);
+  const btn = document.getElementById(`revealBtn-${originalIdx}`);
+  if (el) el.classList.toggle('hidden');
+  if (btn) {
+    btn.innerHTML = el.classList.contains('hidden')
+      ? '<i class="fas fa-rotate mr-2"></i>翻牌查看'
+      : '<i class="fas fa-rotate mr-2"></i>翻回去';
+  }
+}
+
+function markStatus(originalIdx, status) {
+  if (mastered[originalIdx] === status) {
+    delete mastered[originalIdx];
+  } else {
+    mastered[originalIdx] = status;
+  }
+  saveMastered();
+  render();
+}
+
+function goNext() {
+  const indices = getFilteredIndices();
+  if (currentIndex < indices.length - 1) {
+    currentIndex++;
+    render();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+}
+
+function goPrev() {
+  if (currentIndex > 0) {
+    currentIndex--;
+    render();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+}
+
+// Keyboard navigation
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') goNext();
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') goPrev();
+});
+
+// Touch swipe
+let touchStartX = 0;
+document.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; });
+document.addEventListener('touchend', e => {
+  const diff = touchStartX - e.changedTouches[0].clientX;
+  if (Math.abs(diff) > 80) {
+    if (diff > 0) goNext();
+    else goPrev();
+  }
+});
+
+// Init
+render();
+</script>
+</body>
+</html>
